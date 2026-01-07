@@ -97,7 +97,7 @@ raptar --with-ecosystem Python
 raptar --with-ecosystem Rust --with-ecosystem Node
 ```
 
-**35 ecosystems included:** Rust, Python, Node, Go, Ruby, Java, Swift, Kotlin, Haskell, and more. Run `--list-ecosystems` for the full list.
+**229 ecosystems included:** Rust, Python, Node, Go, Ruby, Java, Swift, Kotlin, Haskell, and more. Run `--list-ecosystems` for the full list.
 
 **Priority:** Ecosystem templates have the lowest priority. Your `.gitignore`, config settings, and CLI options always override them.
 
