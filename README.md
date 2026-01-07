@@ -16,6 +16,8 @@ A smart tar wrapper that respects `.gitignore` and friends.
 
 ## Installation
 
+**Supported platforms:** Linux and macOS. Windows is not supported due to differences in glob pattern matching and filesystem naming constraints.
+
 ```bash
 cargo install --path .
 ```
