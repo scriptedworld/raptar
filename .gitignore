@@ -1,0 +1,25 @@
+# Build artifacts
+/target/
+
+# Git internals (for archive tools)
+.git/
+
+# Editor/IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Test artifacts
+*.tmp
+
+# Coverage
+*.profraw
+*.profdata
+/coverage/
+tarpaulin-report.html

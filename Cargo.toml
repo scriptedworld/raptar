@@ -1,0 +1,70 @@
+[package]
+name = "raptar"
+version = "0.1.0"
+edition = "2021"
+authors = ["J W <code@scriptedworld.com>"]
+description = "A smart archive tool that respects .gitignore and friends"
+license = "Apache-2.0"
+repository = "https://github.com/scriptedworld/raptar"
+homepage = "https://github.com/scriptedworld/raptar"
+keywords = ["archive", "tar", "gitignore", "cli"]
+categories = ["command-line-utilities", "compression"]
+
+[dependencies]
+# CLI
+clap = { version = "4", features = ["derive"] }
+
+# Pattern matching
+globset = "0.4"
+
+# Archive formats
+tar = "0.4"
+flate2 = "1"
+zip = { version = "7", default-features = false, features = ["deflate", "bzip2", "zstd"] }
+zstd = "0.13"
+bzip2 = "0.6"
+
+# Nice output
+colored = "3"
+indicatif = "0.18"
+bytesize = "2"
+
+# Configuration
+dirs = "6"
+toml = "0.9"
+serde = { version = "1", features = ["derive"] }
+
+# Error handling
+anyhow = "1"
+thiserror = "2"
+
+# Time handling for reproducible builds
+filetime = "0.2"
+time = "0.3"
+
+[profile.release]
+lto = true
+codegen-units = 1
+
+[dev-dependencies]
+tempfile = "3"
+assert_cmd = "2"
+predicates = "3"
+tar = "0.4"
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+nursery = { level = "warn", priority = -1 }
+cargo = { level = "warn", priority = -1 }
+# Allow some pedantic lints that are too noisy or intentional
+module_name_repetitions = "allow"
+must_use_candidate = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+struct_excessive_bools = "allow"  # CLI args naturally have many bools
+cast_precision_loss = "allow"  # Fine for display percentages
+multiple_crate_versions = "allow"  # Transitive deps, can't control

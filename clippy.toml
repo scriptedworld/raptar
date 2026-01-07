@@ -1,0 +1,8 @@
+# Clippy lint configuration
+# See: https://rust-lang.github.io/rust-clippy/master/index.html
+
+# Increase cognitive complexity threshold slightly
+cognitive-complexity-threshold = 30
+
+# Allow slightly longer type names
+type-complexity-threshold = 300
