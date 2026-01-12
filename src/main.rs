@@ -15,8 +15,9 @@
 //!
 //! ## Rule Precedence
 //!
-//! All patterns from all sources are combined and sorted by specificity
-//! (fewer wildcards first). First match wins.
+//! Last match wins. Rules from different sources are applied in priority order
+//! (ecosystem < ignorefiles < config < CLI). Within each source, later rules
+//! override earlier ones, following standard gitignore semantics.
 
 mod archive;
 mod config;

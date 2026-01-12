@@ -376,6 +376,61 @@ mod patterns {
         assert!(preview.contains("logs/keep.log"));
     }
 
+    #[test]
+    fn negation_overrides_directory_pattern() {
+        // Critical test: "last rule wins" applies even to directory patterns
+        // This differs from strict gitignore where parent exclusion blocks re-inclusion.
+        // Raptar emits a warning when this happens to alert users of the difference.
+        let tmp = TempDir::new().unwrap();
+        create_file(tmp.path(), ".gitignore", "build/\n!build/important.txt\n");
+        create_file(tmp.path(), "build/junk.txt", "junk");
+        create_file(tmp.path(), "build/important.txt", "important");
+        create_file(tmp.path(), "build/nested/deep.txt", "deep");
+
+        let preview = get_preview(&tmp);
+        // build/ excludes the directory contents
+        assert!(
+            !preview.contains("build/junk.txt"),
+            "junk.txt should be excluded"
+        );
+        assert!(
+            !preview.contains("build/nested"),
+            "nested dir should be excluded"
+        );
+        // But the negation wins because it comes AFTER - last rule wins
+        // (raptar will emit a gitignore-compat warning to stderr about this)
+        assert!(
+            preview.contains("build/important.txt"),
+            "important.txt should be INCLUDED - last rule wins, even for directory patterns"
+        );
+    }
+
+    #[test]
+    fn multiple_negations_last_wins() {
+        // Verify the chain: exclude -> include -> exclude -> include
+        let tmp = TempDir::new().unwrap();
+        create_file(
+            tmp.path(),
+            ".gitignore",
+            "*.log\n!*.log\n*.log\n!important.log\n",
+        );
+        create_file(tmp.path(), "debug.log", "debug");
+        create_file(tmp.path(), "important.log", "important");
+
+        let preview = get_preview(&tmp);
+        // *.log (exclude) -> !*.log (include) -> *.log (exclude) -> !important.log (include)
+        // debug.log: matches *.log (exclude), !*.log (include), *.log (exclude) -> EXCLUDED
+        // important.log: same chain, but then !important.log (include) -> INCLUDED
+        assert!(
+            !preview.contains("debug.log"),
+            "debug.log excluded by third rule"
+        );
+        assert!(
+            preview.contains("important.log"),
+            "important.log included by last matching rule"
+        );
+    }
+
     // ------------------------------------------------------------------------
     // Directory patterns (trailing /)
     // ------------------------------------------------------------------------
@@ -525,59 +580,59 @@ mod structure {
     }
 
     // ------------------------------------------------------------------------
-    // Nested .gitignore files
+    // Nested .gitignore files (not auto-processed, but we warn)
     // ------------------------------------------------------------------------
 
-    // BUG: We only parse root-level .gitignore, not nested ones
     #[test]
-    #[ignore = "BUG: nested .gitignore files not discovered"]
-    fn nested_gitignore_adds_rules() {
+    fn warns_about_nested_gitignore() {
         let tmp = TempDir::new().unwrap();
         create_file(tmp.path(), ".gitignore", "*.log\n");
         create_file(tmp.path(), "src/.gitignore", "*.tmp\n");
-        create_file(tmp.path(), "root.log", "log");
-        create_file(tmp.path(), "src/app.log", "log");
-        create_file(tmp.path(), "src/cache.tmp", "tmp");
         create_file(tmp.path(), "src/main.rs", "rs");
-        create_file(tmp.path(), "root.tmp", "tmp"); // root .gitignore doesn't exclude .tmp
 
-        let preview = get_preview(&tmp);
-        assert!(!preview.contains("root.log"));
-        assert!(!preview.contains("app.log"));
-        assert!(!preview.contains("cache.tmp"));
-        assert!(preview.contains("main.rs"));
-        assert!(preview.contains("root.tmp")); // not excluded at root level
+        // Run raptar and capture stderr
+        let output = raptar().arg(tmp.path()).arg("--preview").output().unwrap();
+
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            stderr.contains("Nested ignore file not processed"),
+            "Should warn about nested .gitignore. stderr: {stderr}"
+        );
+        assert!(
+            stderr.contains("src/.gitignore") || stderr.contains("src\\.gitignore"),
+            "Warning should mention the nested file path. stderr: {stderr}"
+        );
     }
 
     #[test]
-    fn nested_gitignore_rules_are_relative() {
+    fn no_warning_when_nested_gitignore_explicitly_added() {
         let tmp = TempDir::new().unwrap();
-        create_file(tmp.path(), "src/.gitignore", "/local.txt\n");
-        create_file(tmp.path(), "src/local.txt", "local");
-        create_file(tmp.path(), "src/sub/local.txt", "sub local");
-        create_file(tmp.path(), "local.txt", "root local");
+        create_file(tmp.path(), ".gitignore", "*.log\n");
+        create_file(tmp.path(), "src/.gitignore", "*.tmp\n");
+        create_file(tmp.path(), "src/main.rs", "rs");
+        create_file(tmp.path(), "src/cache.tmp", "tmp");
 
-        let preview = get_preview(&tmp);
-        assert!(!preview.contains("src/local.txt") || preview.contains("src/sub/local.txt"));
-        // /local.txt in src/.gitignore means src/local.txt, not src/sub/local.txt
-    }
+        // Explicitly add the nested gitignore via CLI
+        let output = raptar()
+            .arg(tmp.path())
+            .arg("--preview")
+            .arg("--with-ignorefile")
+            .arg("src/.gitignore")
+            .output()
+            .unwrap();
 
-    // BUG: We only parse root-level .gitignore, not nested ones
-    #[test]
-    #[ignore = "BUG: nested .gitignore files not discovered"]
-    fn deeply_nested_gitignore() {
-        let tmp = TempDir::new().unwrap();
-        create_file(tmp.path(), "a/b/c/.gitignore", "secret.txt\n");
-        create_file(tmp.path(), "a/b/c/secret.txt", "secret");
-        create_file(tmp.path(), "a/b/c/public.txt", "public");
-        create_file(tmp.path(), "a/b/secret.txt", "not excluded");
-        create_file(tmp.path(), "secret.txt", "root not excluded");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            !stderr.contains("Nested ignore file not processed"),
+            "Should NOT warn when nested file is explicitly added. stderr: {stderr}"
+        );
 
-        let preview = get_preview(&tmp);
-        assert!(!preview.contains("a/b/c/secret.txt"));
-        assert!(preview.contains("a/b/c/public.txt"));
-        assert!(preview.contains("a/b/secret.txt"));
-        assert!(preview.contains("  secret.txt")); // root level
+        // And the nested rules should be applied
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(
+            !stdout.contains("cache.tmp"),
+            "src/.gitignore should exclude *.tmp files"
+        );
     }
 
     // ------------------------------------------------------------------------

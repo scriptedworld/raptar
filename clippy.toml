@@ -1,8 +1,39 @@
 # Clippy lint configuration
 # See: https://rust-lang.github.io/rust-clippy/master/index.html
+#
+# Industry Standard Thresholds:
+# - Cognitive complexity: 0-5 good, 6-15 warning, 16+ refactor
+# - Cyclomatic complexity: 1-10 good, 11-20 warning, 21+ refactor
+# - Lines per function: <25 good, 25-50 warning, 50+ refactor
+# - Function arguments: 0-4 good, 5-6 warning, 7+ refactor
+#
+# These thresholds are set slightly above "good" to reduce noise while
+# still catching genuinely problematic code.
 
-# Increase cognitive complexity threshold slightly
+# Cognitive complexity (mental effort to understand code)
+# Default: 25, Industry "needs attention": 15
+# Set to 30 to accommodate existing code; tighten as functions are refactored
 cognitive-complexity-threshold = 30
 
-# Allow slightly longer type names
+# Maximum lines in a function before triggering too_many_lines
+# Default: 100, Industry "should refactor": 50
+too-many-lines-threshold = 100
+
+# Maximum function arguments before triggering too_many_arguments
+# Default: 7, Industry "too many": 7
+too-many-arguments-threshold = 7
+
+# Type complexity (nested generics, etc.)
+# Default: 250
 type-complexity-threshold = 300
+
+# Maximum nesting depth (if/match/loop)
+# Default: 0 (disabled), Industry "complex": 4-5
+# Disabled for now - too aggressive for typical Rust patterns
+excessive-nesting-threshold = 0
+
+# Disallow common placeholder names in non-test code
+disallowed-names = ["foo", "bar", "baz", "quux"]
+
+# Single character names allowed (loop counters, etc.)
+single-char-binding-names-threshold = 4

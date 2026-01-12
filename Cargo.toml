@@ -36,10 +36,8 @@ serde = { version = "1", features = ["derive"] }
 
 # Error handling
 anyhow = "1"
-thiserror = "2"
 
 # Time handling for reproducible builds
-filetime = "0.2"
 time = "0.3"
 
 [profile.release]
@@ -54,12 +52,16 @@ tar = "0.4"
 
 [lints.rust]
 unsafe_code = "forbid"
+dead_code = "warn"
 
 [lints.clippy]
 all = { level = "warn", priority = -1 }
 pedantic = { level = "warn", priority = -1 }
 nursery = { level = "warn", priority = -1 }
 cargo = { level = "warn", priority = -1 }
+# Complexity checks
+cognitive_complexity = "warn"
+too_many_lines = "warn"
 # Allow some pedantic lints that are too noisy or intentional
 module_name_repetitions = "allow"
 must_use_candidate = "allow"

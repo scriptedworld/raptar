@@ -1,8 +1,8 @@
 //! Rule system for pattern matching with path-based indexing.
 //!
 //! Patterns are absolutized at parse time and indexed by activation path.
-//! At walk time, we look up applicable rules by directory path and scan
-//! a pre-sorted list for the first match.
+//! At walk time, we look up applicable rules by directory path and find
+//! the last matching rule (gitignore semantics: last match wins).
 
 use anyhow::{Context, Result};
 use colored::Colorize;
@@ -183,6 +183,8 @@ pub struct RuleIndex {
     next_seq: usize,
     /// Paths of ignore files that were loaded (to avoid warning about them)
     pub loaded_ignore_files: HashSet<PathBuf>,
+    /// Directory patterns that have been excluded (for gitignore compatibility warnings)
+    excluded_directories: HashSet<PathBuf>,
 }
 
 impl RuleIndex {
@@ -194,6 +196,7 @@ impl RuleIndex {
             rules: Vec::new(),
             next_seq: 0,
             loaded_ignore_files: HashSet::new(),
+            excluded_directories: HashSet::new(),
         }
     }
 
@@ -228,6 +231,42 @@ impl RuleIndex {
         // Skip patterns that can never match in archive
         if !could_match_in_archive(&info.activation_path, &self.archive_root) {
             return Ok(());
+        }
+
+        // Track directory exclusions for gitignore compatibility warnings
+        let is_negation = pattern.starts_with('!');
+        if !is_negation && action == Action::Exclude && info.is_dir_pattern {
+            // This is a directory exclusion pattern like "build/"
+            // Store the original pattern (without trailing /) for later warning checks
+            let dir_pattern = clean_pattern.trim_end_matches('/').to_string();
+            self.excluded_directories
+                .insert(PathBuf::from(&dir_pattern));
+        }
+
+        // Warn if this is a negation that targets an excluded directory
+        // This works in raptar but would be ignored by gitignore
+        if is_negation && actual_action == Action::Include {
+            let negated_path = clean_pattern;
+            for excluded_dir in &self.excluded_directories {
+                let excluded_str = excluded_dir.to_string_lossy();
+                // Check if the negated pattern starts with the excluded directory
+                if negated_path.starts_with(excluded_str.as_ref())
+                    && negated_path
+                        .chars()
+                        .nth(excluded_str.len())
+                        .is_some_and(|c| c == '/')
+                {
+                    eprintln!(
+                        "{warn} Pattern '{pat}' re-includes from excluded directory '{dir}/'. \
+                         This works in raptar but would be IGNORED by gitignore. \
+                         Use '{dir}/*' instead of '{dir}/' for pure gitignore compatibility.",
+                        warn = "⚠ gitignore-compat:".yellow(),
+                        pat = pattern,
+                        dir = excluded_str
+                    );
+                    break;
+                }
+            }
         }
 
         // Build the indexed rule

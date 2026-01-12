@@ -97,7 +97,7 @@ raptar --with-ecosystem Python
 raptar --with-ecosystem Rust --with-ecosystem Node
 ```
 
-**35 ecosystems included:** Rust, Python, Node, Go, Ruby, Java, Swift, Kotlin, Haskell, and more. Run `--list-ecosystems` for the full list.
+**229 ecosystems included:** Rust, Python, Node, Go, Ruby, Java, Swift, Kotlin, Haskell, and more. Run `--list-ecosystems` for the full list.
 
 **Priority:** Ecosystem templates have the lowest priority. Your `.gitignore`, config settings, and CLI options always override them.
 
@@ -244,6 +244,35 @@ Files excluded:
   temp.bak (--with-exclude)
 ```
 
+## Gitignore Compatibility
+
+raptar follows gitignore syntax and "last match wins" semantics, with one key difference:
+
+**Directory exclusion:** In strict gitignore, if you exclude a directory (e.g., `build/`), you cannot re-include files inside it with negation patterns like `!build/important.txt`. Git stops traversing excluded directories entirely.
+
+**raptar is more flexible:** Negation patterns work even for files inside excluded directories. This is intentional—it provides more control over what gets archived.
+
+**When this matters:**
+```gitignore
+# This works in raptar but would be IGNORED by gitignore:
+build/
+!build/important.txt
+```
+
+**raptar warns you** when you use patterns that would behave differently in gitignore:
+```
+⚠ gitignore-compat: Pattern '!build/important.txt' re-includes from excluded directory 'build/'.
+  This works in raptar but would be IGNORED by gitignore.
+  Use 'build/*' instead of 'build/' for pure gitignore compatibility.
+```
+
+**For pure gitignore compatibility**, use `build/*` (excludes contents) instead of `build/` (excludes directory):
+```gitignore
+# This works identically in both raptar and gitignore:
+build/*
+!build/important.txt
+```
+
 ## Compression Comparison
 
 Example compression ratios (your mileage may vary):
@@ -279,9 +308,12 @@ raptar uses `just` for task automation:
 ```bash
 cargo install just
 
-just              # Show all commands
-just check        # fmt + clippy + test
-just ci           # Full CI check
+just                # Show all commands
+just tools-setup    # Install dev dependencies (cargo-audit, cargo-deny, etc.)
+just checks         # Full check suite (format + tests + quality)
+just quality        # Static analysis only (clippy, audit, deny, machete, complexity)
+just fmt            # Format code
+just test           # Run tests
 just compare-formats  # Compare compression ratios
 ```
 

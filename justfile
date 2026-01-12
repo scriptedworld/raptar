@@ -10,7 +10,7 @@ default:
 alias b := build
 alias r := run
 alias t := test
-alias c := check
+alias c := checks
 alias f := fmt
 
 # ============================================================
@@ -18,24 +18,53 @@ alias f := fmt
 # ============================================================
 
 # Install all dev dependencies (cargo tools used by this justfile)
-setup:
-    @echo "Installing dev dependencies..."
+tools-setup:
+    #!/usr/bin/env bash
+    set -e
+    echo "Installing dev dependencies..."
     cargo install cargo-audit
     cargo install cargo-deny
     cargo install cargo-outdated
     cargo install cargo-watch
-    @echo ""
-    @echo "Optional (requires nightly):"
-    @echo "  cargo install cargo-udeps"
-    @echo ""
-    @echo "Done! Run 'just' to see available commands."
+    cargo install cargo-machete
+    echo ""
+    echo "Installing rust-code-analysis-cli..."
+    # --locked is a workaround for tree-sitter build failures with newer deps
+    # See: https://github.com/mozilla/rust-code-analysis/issues/1054
+    cargo install --locked rust-code-analysis-cli || echo "⚠ rust-code-analysis-cli failed to install"
+    echo ""
+    echo "Installing cargo-udeps (requires nightly)..."
+    cargo +nightly install --force cargo-udeps || echo "⚠ cargo-udeps failed (nightly Rust required: rustup install nightly)"
+    echo ""
+    echo "Done! Run 'just tools-check' to verify installation."
+
+# Update all dev dependencies (force reinstall)
+tools-update:
+    #!/usr/bin/env bash
+    set -e
+    echo "Updating dev dependencies..."
+    cargo install --force cargo-audit
+    cargo install --force cargo-deny
+    cargo install --force cargo-outdated
+    cargo install --force cargo-watch
+    cargo install --force cargo-machete
+    echo ""
+    echo "Installing rust-code-analysis-cli..."
+    # --locked is a workaround for tree-sitter build failures with newer deps
+    # See: https://github.com/mozilla/rust-code-analysis/issues/1054
+    cargo install --force --locked rust-code-analysis-cli || echo "⚠ rust-code-analysis-cli failed to install"
+    echo ""
+    echo "Updating cargo-udeps (requires nightly)..."
+    cargo +nightly install --force cargo-udeps || echo "⚠ cargo-udeps failed (nightly Rust required: rustup install nightly)"
+    echo ""
+    echo "Done! Run 'just tools-check' to verify installation."
 
 # Check which dev tools are installed
-check-tools:
+tools-check:
     #!/usr/bin/env bash
     echo "Checking dev tools..."
     echo ""
-    for tool in cargo-audit cargo-deny cargo-outdated cargo-watch cargo-udeps; do
+    for tool in cargo-audit cargo-deny cargo-outdated cargo-watch cargo-machete rust-code-analysis-cli cargo-udeps; do
         if cargo install --list | grep -q "^$tool "; then
             echo "✓ $tool"
         else
@@ -52,7 +81,7 @@ build:
     cargo build
 
 # Build release version (runs checks first)
-release: check
+release: checks
     cargo build --release
 
 # Run with arguments
@@ -71,8 +100,15 @@ test-verbose:
 # Quality checks
 # ============================================================
 
-# Run all quality checks (format check + clippy + tests)
-check: fmt-check clippy test
+# Static analysis (lints, dead code, complexity, security, deps)
+quality: clippy-all audit deny machete complexity
+    @echo ""
+    @echo "✓ Quality checks passed!"
+
+# Full check suite (format + tests + quality)
+checks: fmt-check test quality
+    @echo ""
+    @echo "✓ All checks passed!"
 
 # Format code
 fmt:
@@ -94,20 +130,55 @@ clippy-all:
 clippy-fix:
     cargo clippy --fix --allow-dirty
 
+# Cyclomatic complexity analysis
+# NOTE: --locked required due to upstream tree-sitter compat issues
+# See: https://github.com/mozilla/rust-code-analysis/issues/1054
+complexity:
+    #!/usr/bin/env bash
+    if command -v rust-code-analysis-cli &> /dev/null; then
+        rust-code-analysis-cli -m -p src/
+    else
+        echo "⚠ Skipping cyclomatic complexity (rust-code-analysis-cli not available)"
+    fi
+
+# Check for unused dependencies (fast, no nightly needed)
+machete:
+    #!/usr/bin/env bash
+    if ! command -v cargo-machete &> /dev/null; then
+        echo "Installing cargo-machete..."
+        cargo install cargo-machete
+    fi
+    cargo machete
+
 # ============================================================
 # Security & Dependencies
 # ============================================================
 
-# Security audit (requires: cargo install cargo-audit)
+# Security audit
 audit:
+    #!/usr/bin/env bash
+    if ! command -v cargo-audit &> /dev/null; then
+        echo "Installing cargo-audit..."
+        cargo install cargo-audit
+    fi
     cargo audit
 
-# License and dependency check (requires: cargo install cargo-deny)
+# License and dependency check
 deny:
+    #!/usr/bin/env bash
+    if ! command -v cargo-deny &> /dev/null; then
+        echo "Installing cargo-deny..."
+        cargo install cargo-deny
+    fi
     cargo deny check
 
-# Check for outdated dependencies (requires: cargo install cargo-outdated)
+# Check for outdated dependencies
 outdated:
+    #!/usr/bin/env bash
+    if ! command -v cargo-outdated &> /dev/null; then
+        echo "Installing cargo-outdated..."
+        cargo install cargo-outdated
+    fi
     cargo outdated
 
 # Update dependencies
@@ -146,8 +217,17 @@ uninstall:
 tree:
     cargo tree
 
-# Check for unused dependencies (requires: cargo install cargo-udeps)
+# Check for unused dependencies (requires nightly)
 udeps:
+    #!/usr/bin/env bash
+    if ! cargo +nightly --version &> /dev/null; then
+        echo "⚠ Nightly Rust required for cargo-udeps. Install with: rustup install nightly"
+        exit 1
+    fi
+    if ! cargo +nightly udeps --version &> /dev/null; then
+        echo "Installing cargo-udeps..."
+        cargo +nightly install cargo-udeps
+    fi
     cargo +nightly udeps
 
 # ============================================================
@@ -158,22 +238,29 @@ udeps:
 dist: release
     ./target/release/raptar -r -o raptar-$(cargo pkgid | cut -d'#' -f2).tar.gz .
 
-# Run all quality tools (requires external tools)
-quality: check audit deny
-
-# Full CI-like check
-ci: fmt-check clippy-all test
+# Full CI-like check (same as checks)
+ci: checks
 
 # ============================================================
 # Development helpers
 # ============================================================
 
-# Watch for changes and run tests (requires: cargo install cargo-watch)
+# Watch for changes and run tests
 watch:
+    #!/usr/bin/env bash
+    if ! command -v cargo-watch &> /dev/null; then
+        echo "Installing cargo-watch..."
+        cargo install cargo-watch
+    fi
     cargo watch -x test
 
-# Watch and run clippy (requires: cargo install cargo-watch)
+# Watch and run clippy
 watch-clippy:
+    #!/usr/bin/env bash
+    if ! command -v cargo-watch &> /dev/null; then
+        echo "Installing cargo-watch..."
+        cargo install cargo-watch
+    fi
     cargo watch -x clippy
 
 # Run with example - preview current directory
