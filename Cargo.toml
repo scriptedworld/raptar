@@ -1,6 +1,6 @@
 [package]
 name = "raptar"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 authors = ["J W <code@scriptedworld.com>"]
 description = "A smart archive tool that respects .gitignore and friends"
